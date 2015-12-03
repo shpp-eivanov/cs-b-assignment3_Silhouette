@@ -1,14 +1,21 @@
-﻿#include <iostream>
+﻿/********************************************************************************************
+ * File: Silhouette.cpp
+ * ----------------------
+ * v.1 2015/11/05
+ * Programm gets white-black image (GIF, PNG, JPEG, BMP),
+ * and discovers what object on it
+ * are actually could be human bodies silhouettes.
+ * Shows quantity of humans wich have
+ * been found.
+ ********************************************************************************************/
+
+#include <iostream>
 #include <stdlib.h>
 #include "queue.h"
-#include "myVector.h"
+#include <Vector>
 #include "gbufferedimage.h"
 
 using namespace std;
-
-//Дочитать о const и оформлении шаблонных классов
-//Добавить remove по value а не по индексу
-
 
 struct Pt{
     int x;
@@ -37,6 +44,9 @@ GBufferedImage* img;
 
 /* Make biColor image */
 void filterImage(GBufferedImage* img){
+    /* -----------------------------------------------------------*/
+    cout << "       - FILTER IMAGE INTO BLACK-WHITE PIXELS" << endl;
+    /* -----------------------------------------------------------*/
     int height = img->getHeight();
     int width = img->getWidth();
     for(int row = 0; row < (height); row++){
@@ -53,11 +63,21 @@ void filterImage(GBufferedImage* img){
     }
 }
 
+/* Checks if this vector contain such value */
+bool isVectorContains(Pt value, Vector<Pt>& vec){
+    bool contains = false;
+    for(Pt vecElem: vec){
+        if(vecElem == value){
+            contains = true;
+            break;
+        }
+    }
+    return contains;
+}
 
-void removeFromVector(Pt& cell, MyVector<Pt>& vec){
+void removeFromVector(Pt& cell, Vector<Pt>& vec){
     for(int i = 0; i < vec.size(); i++){
-        Pt elem = vec.get(i);
-        if (elem == cell){
+        if (vec[i] == cell){
             vec.remove(i);
             break;
         }
@@ -65,24 +85,24 @@ void removeFromVector(Pt& cell, MyVector<Pt>& vec){
 }
 
 /* Adds current cell and all around cells to object array */
-MyVector<Pt> createCellsArray(int row, int col){
-    MyVector<Pt> result;
+Vector<Pt> createCellsArray(int row, int col){
+    Vector<Pt> result;
     /* Add first cell */
     Pt pt;
     pt.x = col;
     pt.y = row;
     Queue<Pt> pointsQueue;
-    MyVector<Pt>queueList;
+    Vector<Pt>queueList;
     pointsQueue.enqueue(pt);
     queueList.add(pt);
     /* Around cells queue process */
     while(!pointsQueue.isEmpty()){
         pt = pointsQueue.dequeue();
-        queueList.removeValue(pt);
-        if(!result.isContains(pt)){
+        removeFromVector(pt, queueList);
+        if(!isVectorContains(pt, result)){
             result.add(pt);          
             img->setRGB(pt.x, pt.y, unionColor);
-            //addNeighboursToQueue(pt, pointsQueue, queueList, result);
+
             int imgWidth = img->getWidth();
             int imgHeight = img->getHeight();
             int x = pt.x;
@@ -96,8 +116,8 @@ MyVector<Pt> createCellsArray(int row, int col){
                                 Pt objPoint;
                                 objPoint.x = i;
                                 objPoint.y = u;
-                                if(!result.isContains(objPoint)){
-                                    if(!queueList.isContains(objPoint)){
+                                if(!isVectorContains(objPoint, result)){
+                                    if(!isVectorContains(objPoint, queueList)){
                                         pointsQueue.enqueue(objPoint);
                                         queueList.add(objPoint);
                                     }
@@ -114,7 +134,10 @@ MyVector<Pt> createCellsArray(int row, int col){
 
 /* Make first iteration through picture and put cells to
  * some objects (unions) vectors */
-void assignCells (GBufferedImage* img, MyVector<MyVector<Pt>>& unionsTable){
+void assignCells (GBufferedImage* img, Vector<Vector<Pt>>& unionsTable){
+    /* ------------------------------------------------*/
+    cout << "       - ASSIGN PIXELS TO OBJECTS" << endl;
+    /* ------------------------------------------------*/
     int imgWidth = img->getWidth();
     int imgHeight = img->getHeight();
     /* Main pass through image */
@@ -123,26 +146,28 @@ void assignCells (GBufferedImage* img, MyVector<MyVector<Pt>>& unionsTable){
             int cellColor = img->getRGB(col, row);
             /* Isn't white or yet object colored cell */
             if((cellColor != unionColor) && (cellColor != WHITE)){
-                 MyVector<Pt> vec = createCellsArray(row, col);
+                 Vector<Pt> vec = createCellsArray(row, col);
                  if(vec.size() > weakObject){
                      unionsTable.add(vec);
                  }else{
-                     /* Erase the smallest objects */
-                     for(int u = 0; u < vec.size(); u++){
-                         Pt i = vec.get(u);
+                     /* Erase object the smallest objects */
+                     for(Pt i: vec){
                          img->setRGB(i.x, i.y, WHITE);
                      }
                  }
             }
         }
     }
+    /* -------------------------------------------------*/
+    cout << "       - UNIONS BEFORE HUMAN-PROPORTIONS CHECKING = "
+         << unionsTable.size() << endl;
+    /* -------------------------------------------------*/
 }
 
 /* Finds edges points of the object */
-void findMaxes(int& min_X, int& max_X, int& min_Y, int& max_Y, MyVector<Pt>& objectVec){
+void findMaxes(int& min_X, int& max_X, int& min_Y, int& max_Y, Vector<Pt>& objectVec){
     /* initiate max values by some point */
-    for(int u = 0; u < objectVec.size(); u++){
-        Pt i = objectVec.get(u);
+    for(Pt i: objectVec){
         min_X = i.x;
         min_X = i.x;
         min_Y = i.y;
@@ -150,8 +175,7 @@ void findMaxes(int& min_X, int& max_X, int& min_Y, int& max_Y, MyVector<Pt>& obj
         break;
     }
     /* Find max and min values */
-    for(int u = 0; u < objectVec.size(); u++){
-        Pt i = objectVec.get(u);
+    for(Pt i: objectVec){
         if(i.x < min_X){
             min_X = i.x;
         }
@@ -168,13 +192,12 @@ void findMaxes(int& min_X, int& max_X, int& min_Y, int& max_Y, MyVector<Pt>& obj
 }
 
 /* Counts real middle width of the object */
-int countMiddleWidth(int middle_Y, MyVector<Pt> objectVec){
+int countMiddleWidth(int middle_Y, Vector<Pt> objectVec){
     int middleWidth = 0;
     int middleMin_X = 0;
     int middleMax_X = 0;
     /* Initiates max values by some point */
-    for(int u = 0; u < objectVec.size(); u++){
-        Pt i = objectVec.get(u);
+    for(Pt i: objectVec){
         if(i.y == middle_Y){
             middleMin_X = i.x;
             middleMax_X = i.x;
@@ -182,8 +205,7 @@ int countMiddleWidth(int middle_Y, MyVector<Pt> objectVec){
         }
     }
     /* Finds edges on the middle Y level */
-    for(int u = 0; u < objectVec.size(); u++){
-        Pt i = objectVec.get(u);
+    for(Pt i: objectVec){
         if(i.y == middle_Y){
             if(i.x < middleMin_X){
                 middleMin_X = i.x;
@@ -199,10 +221,9 @@ int countMiddleWidth(int middle_Y, MyVector<Pt> objectVec){
 
 /* Repaint object perimeter for 1 time due to simple condition -
  * if there are other colors cells around current cell - it's perimeter cell */
-void repaintPerimetrColor(MyVector<Pt>& objectVec){
-    MyVector<Pt> perimeter;
-    for(int u = 0; u < objectVec.size(); u++){
-        Pt point = objectVec.get(u);
+void repaintPerimetrColor(Vector<Pt>& objectVec){
+    Vector<Pt> perimeter;
+    for(Pt point: objectVec){
         int x = point.x;
         int y = point.y;
         int pointColor = img->getRGB(x, y);
@@ -211,9 +232,7 @@ void repaintPerimetrColor(MyVector<Pt>& objectVec){
                 for(int i = x-1; i <= x+1; i++){
                     for(int u = y-1; u <= y+1; u++){                       
                         if(img->getRGB(i, u) != pointColor){
-                            if(!perimeter.isContains(point)){
-                                    perimeter.add(point);
-                            }
+                            perimeter.add(point);
                             break;
                         }
                     }
@@ -221,21 +240,21 @@ void repaintPerimetrColor(MyVector<Pt>& objectVec){
             }
         }
     }
-    cout << objectVec.size() << " " << perimeter.size()<< endl;
     /* Repaint all perimetr cells */
-    for(int u = 0; u < perimeter.size(); u++){
-        Pt i = perimeter.get(u);
-        cout << i.x << " " << i.y << endl;
+    for(Pt i: perimeter){
         img->setRGB(i.x, i.y, PERIMETR_COLOR);
-        objectVec.removeValue(i);
+        removeFromVector(i, objectVec);
     }
 }
 
 /* Shrink object perimetr pixels due to some human body proportions.
  * Decide level of shrinking before */
-void shrinkObjects(MyVector<MyVector<Pt>>& unionsTable){
+void shrinkObjects(Vector<Vector<Pt>>& unionsTable){
+    /* -------------------------------------------------*/
+    cout << "       - SHRINK OBJECTS PERIMETERS" << endl;
+    /* -------------------------------------------------*/
     for(int i = 0; i < unionsTable.size(); i++){
-        MyVector<Pt> objectVec = unionsTable.get(i);
+        Vector<Pt> objectVec = unionsTable[i];
         int min_X = 0;
         int max_X = 0;
         int min_Y = 0;
@@ -252,11 +271,11 @@ void shrinkObjects(MyVector<MyVector<Pt>>& unionsTable){
 }
 
 /* Count humans through the objects and mark no humans objects  */
-int countHumans(MyVector<MyVector<Pt>> unionsTable){
+int countHumans(Vector<Vector<Pt>> unionsTable){
     int result = 0;
     int maxImageHeight = 0;
     for(int i = 0; i <unionsTable.size(); i++){
-        MyVector<Pt> objectVec = unionsTable.get(i);
+        Vector<Pt> objectVec = unionsTable[i];
         int min_X = 0;
         int max_X = 0;
         int min_Y = 0;
@@ -272,13 +291,16 @@ int countHumans(MyVector<MyVector<Pt>> unionsTable){
         if((objectHeight > (2*middleWidth)) && (objectHeight > (maxImageHeight/5))){
                 result++;
         }else{
-            for(int u = 0; u < objectVec.size(); u++){
-                Pt i = objectVec.get(u);
+            for(Pt i: objectVec){
                 /* Set no human objects as garbageColor */
                 img->setRGB(i.x, i.y, garbageColor);
             }
         }
     }
+    /* -------------------------------------------------*/
+    cout << "       - HUMANS QUANTITY DUE TO PROPORTIONS = "
+         << result << endl;
+    /* -------------------------------------------------*/
     return result;
 }
 
@@ -288,45 +310,38 @@ int main(){
     GWindow gw;
     img = new GBufferedImage(800,800, 0);
     /* Enter your image file */
-    img->load("girls.jpg");
+    img->load("picture-large-girls-silhouettes.jpg");
     int imgHeight = img->getHeight();
     int imgWidth = img->getWidth();
     img->resize(imgWidth, imgHeight);
     gw.setSize(imgWidth, imgHeight);
     gw.add(img, 0, 0);
 
-    cout << "*****FILTER IMAGE INTO BLACK-WHITE PIXELS*******" << endl;
+    cout << "PROCESSING..." << endl;
+    cout << "==========================================================" << endl;
     filterImage(img);
 
-    cout << "********FIRST ASSIGN CELLS TO OBJECTS***********" << endl;
     unionColor = GREEN;
     weakObject = ((imgWidth * imgHeight)/1000);//Size for garbage objects
     garbageColor = BLUE;//To show objects discovered as not human
-    MyVector<MyVector<Pt>> unionsTable;
+    Vector<Vector<Pt>> unionsTable;
     assignCells(img, unionsTable);
-
-    cout << "UNIONS BEFORE HUMAN-PROPORTIONS CHECKING = " << unionsTable.size() << endl;
-
     /* Supose, that minimal human silhouette wouldn't be 5 times lower then
      * then highest object */
     int humans1 = countHumans(unionsTable);
-    cout << "HUMANS QUANTITY DUE TO PROPORTIONS = " << humans1 << endl;
 
-
-    cout << "**********SHRINK OBJECT PERIMETR****************" << endl;
     shrinkObjects(unionsTable);
 
-
-    cout << "*******SECOND ASSIGN CELLS TO OBJECTS***********" << endl;
     unionColor = BLACK;//To return black-white picture from function
     weakObject = weakObject;
     garbageColor = BLUE;//To show objects discovered as not human
-    MyVector<MyVector<Pt>> unionsTable2;
+    Vector<Vector<Pt>> unionsTable2;
     assignCells(img, unionsTable2);
-
-    cout << "UNIONS BEFORE HUMAN-PROPORTIONS CHECKING = " << unionsTable2.size() << endl;
     int humans2 = countHumans(unionsTable2);
-    cout << "HUMANS QUANTITY DUE TO PROPORTIONS = " << humans2 << endl;
+
+    int averageQty = (humans1 + humans2) / 2;
+    cout << "==========================================================" << endl;
+    cout << "PROGRAM IS FINISHED. AVERAGE HUMANS QUANTITY IS: " << averageQty << endl;
 
     return 0;
 }
