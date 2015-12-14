@@ -1,7 +1,11 @@
 ﻿/********************************************************************************************
  * File: Silhouette.cpp
  * ----------------------
- * v.2 2015/11/20 - more comments, and some code improvements.
+ * v.3 2015/12/14 - changed:
+ * - detectUnion()
+ * - repaintPerimetrColor()
+ * - adjustMainWindow()
+ *
  *
  * Programm gets white-black image (GIF, PNG, JPEG, BMP),
  * and discovers what object on it
@@ -17,6 +21,9 @@
 #include "gbufferedimage.h"
 #include "filelib.h"
 #include "simpio.h"
+#include "map.h"
+#include <algorithm>
+#include "console.h"
 
 using namespace std;
 
@@ -89,7 +96,8 @@ string fileInput(string promptText){
     return result;
 }
 
-/* Function: adjustMainWindow()
+/* Function: adjustMainWindow()  - Modified:
+ * Improved console window view
  * ----------------------------
  * Makes main program preparations - loads image, sets
  * main global variables */
@@ -100,6 +108,11 @@ void adjustMainWindow(GWindow& gw, string inputFile){
     imgWidth = img->getWidth();
     img->resize(imgWidth, imgHeight);
     gw.setSize(imgWidth, imgHeight);
+    gw.setLocation(0, 0);
+    string title = "Silhouette";
+    setConsoleWindowTitle(title);
+    setConsoleLocation(imgWidth, 0);
+    setConsoleSize(700, 400);
     gw.add(img, 0, 0);
 
     MINIMAL_SIZE = ((imgWidth * imgHeight)/1000);//Size for garbage objects
@@ -155,7 +168,8 @@ void removeFromVector(Pt& cell, Vector<Pt>& vec){
     }
 }
 
-/* Function: detectUnion()
+/* Function: detectUnion() - Modified:
+ * Improved process productivity
  * -----------------------
  * Returns vector of pixels, which are not white
  * on the main program image, and
@@ -167,41 +181,36 @@ void removeFromVector(Pt& cell, Vector<Pt>& vec){
  * @param row, col  pixel where first not white pixel is obtained  */
 Vector<Pt> detectUnion(int row, int col){
     Vector<Pt> result;
+    int imgW2 = imgWidth;
+    int imgH2 = imgHeight;
+
     /* The first cell in result vector is param point */
     Pt pt;
     pt.x = col;
     pt.y = row;
-    Queue<Pt> pointsQueue;//Queue is priority queue class
-    Vector<Pt> queueList;
+    Queue<Pt> pointsQueue;
     pointsQueue.enqueue(pt);
-    queueList.add(pt);
+    img->setRGB(col, row, UNION_COLOR);
     /* Finding of around cells process */
     while(!pointsQueue.isEmpty()){
         pt = pointsQueue.dequeue();
-        removeFromVector(pt,queueList);
-        if(!isVectorContains(pt, result)){
-            result.add(pt);          
-            img->setRGB(pt.x, pt.y, UNION_COLOR);//Every pixel from queue is already validated
-            /* Main around cells checking */
-            int x = pt.x;
-            int y = pt.y;
-            if((x > 0) && (x < (imgWidth - 1))){
-                if((y > 0) && (y < (imgHeight - 1))){
-                    for(int i = x-1; i <= x+1; i++){
-                        for(int u = y-1; u <= y+1; u++){
-                            int cellColor = img->getRGB(i, u);
-                            if((cellColor != UNION_COLOR) && (cellColor != WHITE)){
-                            /* This pixel is new part for current union */
-                                Pt objPoint;
-                                objPoint.x = i;
-                                objPoint.y = u;
-                                if(!isVectorContains(objPoint, result)){
-                                    if(!isVectorContains(objPoint, result)){
-                                        pointsQueue.enqueue(objPoint);
-                                        queueList.add(objPoint);
-                                    }
-                                }
-                            }
+        result.add(pt);
+        /* Main around cells checking */
+        int x = pt.x;
+        int y = pt.y;
+        if((x > 0) && (x < (imgW2 - 1))){
+            if((y > 0) && (y < (imgH2 - 1))){
+                for(int i = x-1; i <= x+1; i++){
+                    for(int u = y-1; u <= y+1; u++){
+                        if((i == x) && (u == y))continue;
+                        int cellColor = img->getRGB(i, u);
+                        if((cellColor != UNION_COLOR) && (cellColor != WHITE)){
+                        /* This pixel is new part for current union */
+                            Pt objPoint;
+                            objPoint.x = i;
+                            objPoint.y = u;
+                            pointsQueue.enqueue(objPoint);
+                            img->setRGB(i, u, UNION_COLOR);
                         }
                     }
                 }
@@ -319,7 +328,8 @@ int getMiddleWidth(int middle_Y, Vector<Pt> objectVec){
     return result;
 }
 
-/* Function: repaintPerimetrColor()
+/* Function: repaintPerimetrColor() - Modified:
+ * Improved process productivity
  * --------------------------------
  * Repaint object perimeter pixels in PERIMETR_COLOR
  * for 1 time due to simple condition: if there are other
@@ -327,36 +337,40 @@ int getMiddleWidth(int middle_Y, Vector<Pt> objectVec){
  *
  * @param objectVec  object to process  */
 void repaintPerimetrColor(Vector<Pt>& objectVec){
-    Vector<Pt> perimeter;
-    for(int u = 0; u < objectVec.size(); u++){
-        Pt point = objectVec[u];
-        int x = point.x;
-        int y = point.y;
+   Map<int,Pt> perimeter;
+   for(int k = 0; k < objectVec.size(); k++){
+       Pt point = objectVec[k];
+       int x = point.x;
+       int y = point.y;
 
-        int pointColor = img->getRGB(x, y);
-        if((x > 0) && (x < (img->getWidth() - 1))){
-            if((y > 0) && (y < (img->getHeight() - 1))){
-                for(int i = x-1; i <= x+1; i++){
-                    for(int u = y-1; u <= y+1; u++){                       
-                        if(img->getRGB(i, u) != pointColor){
-                            if(!isVectorContains(point, perimeter)){
-                                    perimeter.add(point);
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-    }
+       //int pointColor = img->getRGB(x, y);
+       if((x > 0) && (x < (img->getWidth() - 1))){
+           if((y > 0) && (y < (img->getHeight() - 1))){
+               for(int i = x-1; i <= x+1; i++){
+                   for(int u = y-1; u <= y+1; u++){
+                       if((i == x) && (u == y))continue;
 
-    /* Repaint all perimetr cells */
-    for(int u = 0; u < perimeter.size(); u++){
-        Pt i = perimeter[u];
+                       if(img->getRGB(i, u) != UNION_COLOR){
+                           if(!perimeter.containsKey(k)){
+                                   perimeter.add(k,point);
+                           }
+                           break;
+                       }
+                   }
+               }
+           }
+       }
+   }
+   /* Prepare cells in objectVec to delete -
+    * remove from current union due to repaintiong */
+   Vector<int> keys = perimeter.keys();
+   sort(keys.begin(), keys.end());
 
-        img->setRGB(i.x, i.y, PERIMETR_COLOR);
-        removeFromVector(i,objectVec);
-    }
+   /* Repaint all perimetr cells */
+   for(int i = (keys.size() - 1); i >= 0; i--){
+       img->setRGB(perimeter[keys[i]].x, perimeter[keys[i]].y, PERIMETR_COLOR);
+       objectVec.remove(keys[i]);
+   }
 }
 
 /* Function: shrinkAllUnions()
@@ -435,9 +449,9 @@ int silhouettesCounting(Vector<Vector<Pt>> unionsTable){
 
 int main(){  
     /* --------------------------------------------------------------------------*/
-    //string inputFile = "free-vector.jpg";//Enter your image file here
+    string inputFile = "girls.jpg";//Enter your image file here
     /* --------------------------------------------------------------------------*/
-    string inputFile = fileInput("Enter your image file here: ");
+    //string inputFile = fileInput("Enter your image file here: ");
 
     GWindow gw;
     adjustMainWindow(gw, inputFile);//Main window and program settings
